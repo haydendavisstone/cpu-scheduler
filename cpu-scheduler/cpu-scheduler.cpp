@@ -1,4 +1,9 @@
 #include "cpu-scheduler.h"
+#include <iomanip>
+
+#define NUM_COLS 4
+#define MAX_ROW_WIDTH 25
+#define SEPERATOR ' '
 
 using namespace std;
 
@@ -25,17 +30,17 @@ int init() {
 	g_time = 0;
 	for (int i = 0; i < MAX_PROCESSES && assignment_data[i]; i++) {
 		process p;
-		p.stats = { 0, 0, 0, 0, 0 };
+		p.stats = { 0, 0, 0, 0, 0, 0, -1 };
 		for (int j = 0; j < MAX_TASKS && assignment_data[i][j]; j++) {
 			task *t = NULL;
 			if ((t = (task*)malloc(sizeof(task))) != NULL) {
 				t->time = assignment_data[i][j];
-				//t->stats = { -1, -1, 0, -1, -1 };
 				t->custom = NULL;
 			}
 			p.tasks.push_back(t);
 		}
 		p.custom = NULL;
+		p.index = i;
 		processes[i] = p;
 		cpu.push_back(&processes[i]);
 	}
@@ -45,26 +50,40 @@ int init() {
 }
 
 void run_cpu() {
-	process* p = cpu.front();
-	if (p->tasks.empty()) return;
-	task* t = p->tasks.front();
-	--t->time;
-	p->stats.burst_time++;
+	int index = 0;
+	for (std::list<process*>::iterator p = cpu.begin(); p != cpu.end(); p++) {
+		process* current_process = *p;
+		if (current_process->tasks.empty()) return;
+		task* t = current_process->tasks.front();
+		if (index == 0) {
+			--t->time;
+			current_process->stats.burst_time++;
+			if (current_process->stats.response_time < 0) {
+				current_process->stats.response_time = g_time;
+			}
+		} else {
+			++current_process->stats.waiting_time;
+		}
+		++index;
+	}
+
 	++g_time;
 }
 
 void run_io() {
 	if (io.empty()) return;
 	for (std::list<process*>::iterator p = io.begin(); p != io.end();) {
-		if ((*p)->tasks.empty()) {
+		process *current_process = (*p);
+		if (current_process->tasks.empty()) { // IO complete, move to CPU
 			p = io.erase(p);
 			continue;
 		}
-		task* current_task = (*p)->tasks.front();
+		task* current_task = current_process->tasks.front();
 		current_task->time--;
-		if (current_task->time == 0) {
-			(*p)->tasks.pop_front();
-			cpu.push_back((*p));
+		current_process->stats.io_time++;
+		if (current_task->time == 0) { // IO complete, move to CPU
+			current_process->tasks.pop_front();
+			cpu.push_back(current_process);
 			p = io.erase(p);
 		} else {
 			++p;
@@ -72,6 +91,7 @@ void run_io() {
 	}
 }
 
+// Scheduler main loop to run CPU, IO, and perform Algo
 void run(algo_func algo_cb) {
 	int g_time = 0;
 	while (!cpu.empty() || !io.empty()) {
@@ -88,6 +108,7 @@ void run(algo_func algo_cb) {
 	}
 }
 
+// Completes task and sets stats.
 void task_complete(process *current_process) {
 	task *complete_task = current_process->tasks.front();
 	current_process->stats.completion_time = g_time;
@@ -106,9 +127,10 @@ void print_process_lists(list<process*> process_list, const char* message) {
 			cout << "Empty";
 			continue;
 		}
+		cout << "P" << current_process->index;
 		if (current_process->custom) {
 			mlfq* custom = (mlfq*)current_process->custom;
-			cout << "(" << custom->priority << ")";
+			cout << " (" << custom->priority << ")";
 		}
 		for (list<task*>::iterator t = current_process->tasks.begin(); t != current_process->tasks.end(); ++t) {
 			task *current_task = *t;
@@ -117,32 +139,47 @@ void print_process_lists(list<process*> process_list, const char* message) {
 	}
 }
 
-void print_process_task_stats(const char* message) {
-	cout << endl << endl << message;
+void print_processes_stats(const char* message) {
+	process_stats avg = {0, 0, 0, 0, 0, 0, 0};
+	cout << endl << message << endl;
+	// header
+	cout << setw((MAX_ROW_WIDTH * NUM_COLS) + (NUM_COLS * 2)) << setfill('-') << "-" << endl;
+	cout << "|" << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << "" << " |";
+	cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << "Waiting Time (Tw)" << " |";
+	cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << "Turn Around Time (Ttr)" << " |";
+	cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << "Response Time (Tr)" << " |";
+	// rows
 	for (int i = 0; i < MAX_PROCESSES; i++) {
 		process p = processes[i];
-		cout << endl << "PROCESS " << i << endl;
-		p.stats.turn_around_time = p.stats.completion_time;
-		p.stats.waiting_time = p.stats.turn_around_time - p.stats.burst_time;
-		cout << "Arrival Time:\t\t" << p.stats.arrival_time << endl;
-		cout << "Completion Time:\t" << p.stats.completion_time << endl;
-		cout << "Burst Time:\t\t" << p.stats.burst_time << endl;
-		cout << "Turn Around Time:\t" << p.stats.turn_around_time << endl;
-		cout << "Waiting Time:\t\t" << p.stats.waiting_time << endl;
-		cout << "-------------------" << endl;
-		for (list<task*>::iterator t = p.done.begin(); t != p.done.end(); ++t) {
-			task* current_task = *t;
-		}
 		cout << endl;
+		p.stats.turn_around_time = p.stats.waiting_time + p.stats.burst_time + p.stats.io_time;
+		cout << "|" << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << i + 1 << " |";
+		cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << p.stats.waiting_time << " |";
+		cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << p.stats.turn_around_time << " |";
+		cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << p.stats.response_time << " |";
+		avg.waiting_time += p.stats.waiting_time;
+		avg.turn_around_time += p.stats.turn_around_time;
+		avg.response_time += p.stats.response_time;
 	}
+	// Average
+	avg.waiting_time = avg.waiting_time / MAX_PROCESSES;
+	avg.turn_around_time = avg.turn_around_time / MAX_PROCESSES;
+	avg.response_time = avg.response_time / MAX_PROCESSES;
+	cout << endl;
+	cout << "|" << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << "AVG" << " |";
+	cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << avg.waiting_time << " |";
+	cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << avg.turn_around_time << " |";
+	cout << setw(MAX_ROW_WIDTH) << setfill(SEPERATOR) << avg.response_time << " |";
+
+	cout << endl << setw((MAX_ROW_WIDTH * NUM_COLS) + (NUM_COLS * 2)) << setfill('-') << "-" << endl;
 }
 
 int main() {
 	cout << "-- CPU Scheduler --" << endl;
 	run_fcfs(&cpu, &io);
-	print_process_task_stats("FCFS STATS");
-	//run_sjf(&cpu, &io);
-	//print_process_task_stats("SJF STATS");
-	//run_mlfq(&cpu, &io);
-	//print_process_task_stats("MLFQ STATS");
+	print_processes_stats("FCFS STATS");
+	run_sjf(&cpu, &io);
+	print_processes_stats("SJF STATS");
+	run_mlfq(&cpu, &io);
+	print_processes_stats("MLFQ STATS");
 }

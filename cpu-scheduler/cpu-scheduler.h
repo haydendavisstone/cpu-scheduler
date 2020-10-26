@@ -10,10 +10,12 @@
 
 struct process_stats {
 	int arrival_time;
-	int completion_time;
-	int burst_time;
-	int turn_around_time;
 	int waiting_time;
+	int burst_time;
+	int io_time;
+	int completion_time;
+	int turn_around_time; // (Waiting time) + (CPU burst time) + (I/O time)
+	int response_time; // First time it arrives on CPU
 };
 
 struct task {
@@ -23,6 +25,7 @@ struct task {
 };
 
 struct process {
+	int index;
 	std::list<task*> tasks;
 	std::list<task*> done;
 	void* custom;
