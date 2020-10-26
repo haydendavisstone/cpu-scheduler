@@ -8,12 +8,7 @@
 #define MAX_PROCESSES 8
 #define MAX_TASKS 32
 
-enum task_type {
-	CPU_TASK,
-	IO_TASK
-};
-
-struct task_stats {
+struct process_stats {
 	int arrival_time;
 	int completion_time;
 	int burst_time;
@@ -22,9 +17,8 @@ struct task_stats {
 };
 
 struct task {
-	task_stats stats;
+	process_stats stats;
 	int time;
-	task_type type;
 	void* custom;
 };
 
@@ -32,6 +26,7 @@ struct process {
 	std::list<task*> tasks;
 	std::list<task*> done;
 	void* custom;
+	process_stats stats;
 };
 
 struct mlfq {

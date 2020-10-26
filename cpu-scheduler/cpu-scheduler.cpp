@@ -25,16 +25,17 @@ int init() {
 	g_time = 0;
 	for (int i = 0; i < MAX_PROCESSES && assignment_data[i]; i++) {
 		process p;
+		p.stats = { 0, 0, 0, 0, 0 };
 		for (int j = 0; j < MAX_TASKS && assignment_data[i][j]; j++) {
 			task *t = NULL;
-			if (((task*)malloc(sizeof(task))) != NULL) {
+			if ((t = (task*)malloc(sizeof(task))) != NULL) {
 				t->time = assignment_data[i][j];
-				t->type = (task_type)(j % 2);
-				t->stats = { -1, -1, 0, -1, -1 };
+				//t->stats = { -1, -1, 0, -1, -1 };
 				t->custom = NULL;
 			}
 			p.tasks.push_back(t);
 		}
+		p.custom = NULL;
 		processes[i] = p;
 		cpu.push_back(&processes[i]);
 	}
@@ -47,11 +48,8 @@ void run_cpu() {
 	process* p = cpu.front();
 	if (p->tasks.empty()) return;
 	task* t = p->tasks.front();
-	if (t->stats.arrival_time < 0) {
-		t->stats.arrival_time = g_time;
-	}
 	--t->time;
-	t->stats.burst_time++;
+	p->stats.burst_time++;
 	++g_time;
 }
 
@@ -92,7 +90,7 @@ void run(algo_func algo_cb) {
 
 void task_complete(process *current_process) {
 	task *complete_task = current_process->tasks.front();
-	complete_task->stats.completion_time = g_time;
+	current_process->stats.completion_time = g_time;
 	if (complete_task->time == 0) {
 		current_process->done.push_back(complete_task);
 		current_process->tasks.pop_front();
@@ -119,21 +117,21 @@ void print_process_lists(list<process*> process_list, const char* message) {
 	}
 }
 
-void print_process_stats(const char* message) {
+void print_process_task_stats(const char* message) {
 	cout << endl << endl << message;
 	for (int i = 0; i < MAX_PROCESSES; i++) {
 		process p = processes[i];
 		cout << endl << "PROCESS " << i << endl;
+		p.stats.turn_around_time = p.stats.completion_time;
+		p.stats.waiting_time = p.stats.turn_around_time - p.stats.burst_time;
+		cout << "Arrival Time:\t\t" << p.stats.arrival_time << endl;
+		cout << "Completion Time:\t" << p.stats.completion_time << endl;
+		cout << "Burst Time:\t\t" << p.stats.burst_time << endl;
+		cout << "Turn Around Time:\t" << p.stats.turn_around_time << endl;
+		cout << "Waiting Time:\t\t" << p.stats.waiting_time << endl;
+		cout << "-------------------" << endl;
 		for (list<task*>::iterator t = p.done.begin(); t != p.done.end(); ++t) {
 			task* current_task = *t;
-			current_task->stats.turn_around_time = current_task->stats.completion_time - current_task->stats.arrival_time;
-			current_task->stats.waiting_time = current_task->stats.turn_around_time - current_task->stats.burst_time;
-			cout << "Arrival Time:\t\t" << current_task->stats.arrival_time << endl;
-			cout << "Completion Time:\t" << current_task->stats.completion_time << endl;
-			cout << "Burst Time:\t\t" << current_task->stats.burst_time << endl;
-			cout << "Turn Around Time:\t" << current_task->stats.turn_around_time << endl;
-			cout << "Waiting Time:\t\t" << current_task->stats.waiting_time << endl;
-			cout << "-------------------" << endl;
 		}
 		cout << endl;
 	}
@@ -142,9 +140,9 @@ void print_process_stats(const char* message) {
 int main() {
 	cout << "-- CPU Scheduler --" << endl;
 	run_fcfs(&cpu, &io);
-	print_process_stats("FCFS STATS");
-	run_sjf(&cpu, &io);
-	print_process_stats("SJF STATS");
-	run_mlfq(&cpu, &io);
-	print_process_stats("MLFQ STATS");
+	print_process_task_stats("FCFS STATS");
+	//run_sjf(&cpu, &io);
+	//print_process_task_stats("SJF STATS");
+	//run_mlfq(&cpu, &io);
+	//print_process_task_stats("MLFQ STATS");
 }
